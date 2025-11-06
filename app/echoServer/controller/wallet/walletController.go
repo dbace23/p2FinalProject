@@ -39,7 +39,7 @@ func (ct *Controller) CreateTopup(c echo.Context) error {
 
 	res, svcErr := ct.Svc.CreateTopup(c.Request().Context(), uid, req.Amount)
 	if svcErr != nil {
-
+		ct.Log.Error("CreateTopup failed", "err", svcErr)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create topup")
 	}
 	return c.JSON(http.StatusCreated, res)
