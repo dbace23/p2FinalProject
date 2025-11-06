@@ -15,16 +15,19 @@ package main
 
 import (
 	"bookrental/app/echoServer"
+	authctrl "bookrental/app/echoServer/controller/auth"
 	bookctrl "bookrental/app/echoServer/controller/book"
 	paymentctrl "bookrental/app/echoServer/controller/payment"
 	rentalctrl "bookrental/app/echoServer/controller/rental"
 	walletctrl "bookrental/app/echoServer/controller/wallet"
 	"bookrental/app/echoServer/validation"
 	"bookrental/config"
+	authrepo "bookrental/repository/auth"
 	bookrepo "bookrental/repository/book"
 	rentalrepo "bookrental/repository/rental"
 	walletrepo "bookrental/repository/wallet"
 	xenditrepo "bookrental/repository/xendit"
+	authsvc "bookrental/service/auth"
 	booksvc "bookrental/service/book"
 	paymentsvc "bookrental/service/payment"
 	rentalsvc "bookrental/service/rental"
@@ -56,12 +59,14 @@ func main() {
 	defer db.Close()
 
 	// repos
+	ar := authrepo.New(db)
 	br := bookrepo.New(db)
 	rr := rentalrepo.New(db)
 	wr := walletrepo.New(db)
 	xr := xenditrepo.NewHTTP(os.Getenv("XENDIT_API_KEY"))
 
 	// services
+	as := authsvc.New(ar, cfg.JWTSecret)
 	bs := booksvc.New(br)
 	rs := rentalsvc.New(db, rr, xr)
 	ws := walletsvc.New(db, wr, xr)
@@ -69,6 +74,7 @@ func main() {
 
 	// controllers
 	v := validator.New()
+	authC := &authctrl.Controller{Svc: as, V: v, Log: log}
 	bookC := &bookctrl.Controller{Svc: bs, V: v, Log: log}
 	rentalC := &rentalctrl.Controller{Svc: rs, V: v, Log: log}
 	walletC := &walletctrl.Controller{Svc: ws, V: v, Log: log}
@@ -89,7 +95,7 @@ func main() {
 	e.GET("/swagger/*", echoSwagger.WrapHandler)
 
 	echoServer.Register(e, echoServer.C{
-		Auth:    nil,
+		Auth:    authC,
 		Book:    bookC,
 		Rental:  rentalC,
 		Wallet:  walletC,
