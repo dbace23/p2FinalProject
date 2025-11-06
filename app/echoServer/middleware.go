@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"instagram/util/jwt"
+	"bookrental/util/jwt"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -56,7 +56,7 @@ func JWTAuth(secret string) echo.MiddlewareFunc {
 			if !ok {
 				return echo.NewHTTPError(401, "unauthenticated")
 			}
-			c.Set("uid", int64(idf))
+			c.Set("user_id", int64(idf))
 			return next(c)
 		}
 	}

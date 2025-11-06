@@ -14,19 +14,27 @@
 package main
 
 import (
-	echoServer "book/app/echoServer"
-	"book/app/echoServer/controller"
-	"book/app/echoServer/validation"
-	"book/config"
-	authsvc "book/service/auth"
+	"bookrental/app/echoServer"
+	bookctrl "bookrental/app/echoServer/controller/book"
+	paymentctrl "bookrental/app/echoServer/controller/payment"
+	rentalctrl "bookrental/app/echoServer/controller/rental"
+	walletctrl "bookrental/app/echoServer/controller/wallet"
+	"bookrental/app/echoServer/validation"
+	"bookrental/config"
+	bookrepo "bookrental/repository/book"
+	rentalrepo "bookrental/repository/rental"
+	walletrepo "bookrental/repository/wallet"
+	xenditrepo "bookrental/repository/xendit"
+	booksvc "bookrental/service/book"
+	paymentsvc "bookrental/service/payment"
+	rentalsvc "bookrental/service/rental"
+	walletsvc "bookrental/service/wallet"
+	"bookrental/util/database"
 	"context"
-
-	userrepo "book/repository/user"
-
-	"book/util/database"
 	"log/slog"
 	"os"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 	echoSwagger "github.com/swaggo/echo-swagger"
 )
@@ -36,24 +44,35 @@ func main() {
 	cfg := config.Load()
 	ctx := context.Background()
 
+	// logger
+	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	// DB: *sql.DB
 	db, err := database.New(ctx, cfg.DatabaseURL)
 	if err != nil {
-		slog.Error("db connect failed", "err", err)
+		log.Error("db connect failed", "err", err)
 		os.Exit(1)
 	}
-	defer db.Pool.Close()
+	defer db.Close()
 
 	// repos
-
-	ur := userrepo.New(db)
+	br := bookrepo.New(db)
+	rr := rentalrepo.New(db)
+	wr := walletrepo.New(db)
+	xr := xenditrepo.NewHTTP(os.Getenv("XENDIT_API_KEY"))
 
 	// services
-
-	aus := authsvc.New(ur)
+	bs := booksvc.New(br)
+	rs := rentalsvc.New(db, rr, xr)
+	ws := walletsvc.New(db, wr, xr)
+	whs := paymentsvc.New(db, xr, wr, rr)
 
 	// controllers
-
-	uc := controller.NewUserController(aus, cfg.JWTSecret, slog.Default())
+	v := validator.New()
+	bookC := &bookctrl.Controller{Svc: bs, V: v, Log: log}
+	rentalC := &rentalctrl.Controller{Svc: rs, V: v, Log: log}
+	walletC := &walletctrl.Controller{Svc: ws, V: v, Log: log}
+	paymentC := &paymentctrl.Controller{Svc: whs, Log: log}
 
 	// echo
 	e := echo.New()
@@ -70,7 +89,11 @@ func main() {
 	e.GET("/swagger/*", echoSwagger.WrapHandler)
 
 	echoServer.Register(e, echoServer.C{
-		User: uc,
+		Auth:    nil,
+		Book:    bookC,
+		Rental:  rentalC,
+		Wallet:  walletC,
+		Payment: paymentC,
 
 		JWTSecret: cfg.JWTSecret,
 	})

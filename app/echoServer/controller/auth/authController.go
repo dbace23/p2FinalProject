@@ -1,5 +1,5 @@
 // app/echoServer/controller/userController.go
-package controller
+package auth
 
 import (
 	"errors"
@@ -12,14 +12,14 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-type UserController struct {
+type Controller struct {
 	s         authsvc.Service
 	jwtSecret string
 	log       *slog.Logger
 }
 
-func NewUserController(s authsvc.Service, secret string, log *slog.Logger) *UserController {
-	return &UserController{
+func NewUserController(s authsvc.Service, secret string, log *slog.Logger) *Controller {
+	return &Controller{
 		s:         s,
 		jwtSecret: secret,
 		log:       log,
@@ -38,7 +38,7 @@ func NewUserController(s authsvc.Service, secret string, log *slog.Logger) *User
 // @Failure      409  {object}  map[string]any "email/username already taken"
 // @Failure      500  {object}  map[string]any "internal server error"
 // @Router       /v1/users/register [post]
-func (ct *UserController) Register(c echo.Context) error {
+func (ct *Controller) Register(c echo.Context) error {
 	var req model.RegisterReq
 
 	// Bind
@@ -99,7 +99,7 @@ func (ct *UserController) Register(c echo.Context) error {
 // @Failure      401  {object}  map[string]any
 // @Failure      500  {object}  map[string]any
 // @Router       /v1/users/login [post]
-func (ct *UserController) Login(c echo.Context) error {
+func (ct *Controller) Login(c echo.Context) error {
 	var req model.LoginReq
 
 	if err := c.Bind(&req); err != nil {

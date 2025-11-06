@@ -2,20 +2,18 @@ package database
 
 import (
 	"context"
+	"database/sql"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-type DB struct{ Pool *pgxpool.Pool }
-
-func New(ctx context.Context, dsn string) (*DB, error) {
-	cfg, err := pgxpool.ParseConfig(dsn)
+func New(ctx context.Context, dsn string) (*sql.DB, error) {
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, err
 	}
-	p, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
+	if err := db.PingContext(ctx); err != nil {
 		return nil, err
 	}
-	return &DB{Pool: p}, nil
+	return db, nil
 }

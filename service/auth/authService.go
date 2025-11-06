@@ -7,10 +7,10 @@ import (
 
 	"github.com/jackc/pgerrcode"
 
-	"instagram/model"
-	userrepo "instagram/repository/user"
-	"instagram/util/hash"
-	jwtutil "instagram/util/jwt"
+	"bookrental/model"
+	userrepo "bookrental/repository/user"
+	"bookrental/util/hash"
+	jwtutil "bookrental/util/jwt"
 
 	"github.com/jackc/pgconn"
 )

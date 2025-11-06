@@ -1,55 +1,53 @@
 package echoServer
 
 import (
-	"instagram/app/echoServer/controller"
+	"bookrental/app/echoServer/controller/auth"
+	"bookrental/app/echoServer/controller/book"
+	"bookrental/app/echoServer/controller/payment"
+	"bookrental/app/echoServer/controller/rental"
+	"bookrental/app/echoServer/controller/wallet"
 
-	"github.com/golang-jwt/jwt/v5"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 )
 
 type C struct {
-	User     *controller.UserController
-	Post     *controller.PostController
-	Like     *controller.LikeController
-	Activity *controller.ActivityController
-
+	Auth      *auth.Controller
+	Book      *book.Controller
+	Rental    *rental.Controller
+	Wallet    *wallet.Controller
+	Payment   *payment.Controller
 	JWTSecret string
 }
 
 func Register(e *echo.Echo, c C) {
-	// Public group
+	// Public
 	pub := e.Group("/v1")
-	pub.POST("/users/register", c.User.Register)
-	pub.POST("/users/login", c.User.Login)
+	pub.POST("/users/register", c.Auth.Register)
+	pub.POST("/users/login", c.Auth.Login)
 
-	// Protected group (JWT required)
+	// Webhook
+	pub.POST("/webhooks/xendit", c.Payment.HandleXendit)
+
+	// Auth
 	auth := e.Group("/v1")
-
 	auth.Use(echojwt.WithConfig(echojwt.Config{
-		SigningKey:  []byte(c.JWTSecret),
-		TokenLookup: "header:Authorization",
-		NewClaimsFunc: func(c echo.Context) jwt.Claims {
-			return jwt.MapClaims{}
-		},
-		ErrorHandler: func(ctx echo.Context, err error) error {
-			hdr := ctx.Request().Header.Get("Authorization")
-			return ctx.JSON(401, echo.Map{
-				"message": "invalid or missing token",
-				"error":   err.Error(),
-				"got":     hdr,
-			})
-		},
+		SigningKey: []byte(c.JWTSecret),
 	}))
 
-	// Routes under auth
-	auth.POST("/posts", c.Post.Create)
-	auth.GET("/posts", c.Post.List)
-	auth.GET("/posts/:id", c.Post.Detail)
-	auth.DELETE("/posts/:id", c.Post.Delete)
+	// Books
+	auth.GET("/books", c.Book.List)
+	auth.GET("/books/:id", c.Book.Detail)
+	// Admin endpoints
+	auth.POST("/books", c.Book.Create)
+	auth.POST("/books/:id/copies", c.Book.AddCopies)
 
-	auth.POST("/likes", c.Like.Create)
-	auth.DELETE("/likes/:id", c.Like.Delete)
+	// Wallet
+	auth.POST("/wallet/topups", c.Wallet.CreateTopup) // returns payment link
+	auth.GET("/wallet/ledger", c.Wallet.Ledger)       // list ledger
 
-	auth.GET("/activities", c.Activity.ListMine)
+	// Rentals
+	auth.POST("/rentals", c.Rental.Create)            // book + invoice
+	auth.POST("/rentals/:id/return", c.Rental.Return) // return flow
+	auth.GET("/users/me/rentals", c.Rental.MyHistory)
 }
