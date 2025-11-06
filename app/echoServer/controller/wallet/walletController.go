@@ -24,21 +24,25 @@ type Controller struct {
 func (ct *Controller) CreateTopup(c echo.Context) error {
 	uid, err := jwtx.UserIDFromContext(c)
 	if err != nil {
-
-		return echo.NewHTTPError(401, "invalid or missing token")
+		return echo.NewHTTPError(http.StatusUnauthorized, "invalid or missing token")
 	}
 
 	var req CreateTopupReq
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(400, "invalid body")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid body")
+	}
+	if ct.V != nil {
+		if err := ct.V.Struct(req); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "validation error")
+		}
 	}
 
-	res, err := ct.Svc.CreateTopup(c.Request().Context(), uid, req.Amount)
-	if err != nil {
+	res, svcErr := ct.Svc.CreateTopup(c.Request().Context(), uid, req.Amount)
+	if svcErr != nil {
 
-		return echo.NewHTTPError(500, "failed to create topup")
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create topup")
 	}
-	return c.JSON(201, res)
+	return c.JSON(http.StatusCreated, res)
 }
 
 // GET /v1/wallet/ledger

@@ -33,7 +33,8 @@ func Register(e *echo.Echo, c C) {
 	// Auth
 	auth := e.Group("/v1")
 	auth.Use(echojwt.WithConfig(echojwt.Config{
-		SigningKey:    []byte(c.JWTSecret),
+		SigningKey: []byte(c.JWTSecret),
+
 		NewClaimsFunc: func(c echo.Context) jwt.Claims { return jwt.MapClaims{} },
 		TokenLookup:   "header:Authorization",
 	}))
