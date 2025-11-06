@@ -103,7 +103,7 @@ func (s *service) Login(ctx context.Context, req model.LoginReq) (*model.User, s
 	if err != nil || u == nil || u.ID == 0 {
 		return nil, "", wrap(ErrInvalidCreds, "invalid email or password")
 	}
-	if !hash.Check(req.Password, u.PasswordHash) {
+	if !hash.Check(u.PasswordHash, req.Password) {
 		return nil, "", wrap(ErrInvalidCreds, "invalid email or password")
 	}
 
