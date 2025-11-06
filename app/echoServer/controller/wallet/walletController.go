@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"bookrental/app/echoServer/jwtx"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 )
@@ -19,28 +21,24 @@ type Controller struct {
 // @Summary Create top-up invoice (Xendit)
 // @Success 201 {object} map[string]any
 // @Failure 400,401,500
-func (h *Controller) CreateTopup(c echo.Context) error {
+func (ct *Controller) CreateTopup(c echo.Context) error {
+	uid, err := jwtx.UserIDFromContext(c)
+	if err != nil {
+
+		return echo.NewHTTPError(401, "invalid or missing token")
+	}
+
 	var req CreateTopupReq
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, echo.Map{"message": "invalid json"})
+		return echo.NewHTTPError(400, "invalid body")
 	}
-	if err := h.V.Struct(req); err != nil {
-		return c.JSON(http.StatusBadRequest, echo.Map{
-			"message": "validation error",
-			"errors":  map[string]string{"amount": "required, gt 0"},
-		})
-	}
-	userID := c.Get("user_id").(int64)
-	res, err := h.Svc.CreateTopup(c.Request().Context(), userID, req.Amount)
+
+	res, err := ct.Svc.CreateTopup(c.Request().Context(), uid, req.Amount)
 	if err != nil {
-		h.Log.Error("CreateTopup failed", "err", err)
-		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "internal error"})
+
+		return echo.NewHTTPError(500, "failed to create topup")
 	}
-	return c.JSON(http.StatusCreated, echo.Map{
-		"invoice_id":   res.InvoiceID,
-		"payment_link": res.PaymentLink,
-		"expires_at":   res.ExpiresAt,
-	})
+	return c.JSON(201, res)
 }
 
 // GET /v1/wallet/ledger

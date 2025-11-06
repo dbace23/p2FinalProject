@@ -7,6 +7,7 @@ import (
 	"bookrental/app/echoServer/controller/rental"
 	"bookrental/app/echoServer/controller/wallet"
 
+	"github.com/golang-jwt/jwt/v5"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 )
@@ -32,7 +33,9 @@ func Register(e *echo.Echo, c C) {
 	// Auth
 	auth := e.Group("/v1")
 	auth.Use(echojwt.WithConfig(echojwt.Config{
-		SigningKey: []byte(c.JWTSecret),
+		SigningKey:    []byte(c.JWTSecret),
+		NewClaimsFunc: func(c echo.Context) jwt.Claims { return jwt.MapClaims{} },
+		TokenLookup:   "header:Authorization",
 	}))
 
 	// Books
