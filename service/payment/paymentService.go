@@ -33,6 +33,9 @@ type xInvoiceEvent struct {
 }
 
 func (s *service) HandleXendit(ctx context.Context, sigHeader string, raw []byte) error {
+	if err := s.xv.VerifyCallbackSignature(sigHeader, raw); err != nil {
+		return fmt.Errorf("invalid callback signature: %w", err)
+	}
 
 	var ev xInvoiceEvent
 	if err := json.Unmarshal(raw, &ev); err != nil {

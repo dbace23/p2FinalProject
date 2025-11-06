@@ -15,7 +15,7 @@ type Controller struct {
 }
 
 func (h *Controller) HandleXendit(c echo.Context) error {
-	sig := c.Request().Header.Get("x-callback-token") // or signature header if enabled
+	sig := c.Request().Header.Get("X-Callback-Token")
 	raw, _ := io.ReadAll(c.Request().Body)
 
 	if err := h.Svc.HandleXendit(c.Request().Context(), sig, raw); err != nil {
