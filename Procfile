@@ -1,1 +1,1 @@
-web:  bin/book
+web:  bin/bookrental
