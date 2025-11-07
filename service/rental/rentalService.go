@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 
 	"github.com/labstack/echo/v4"
 )
@@ -39,10 +38,10 @@ func New(db *sql.DB, rr rentalrepo.Repo) Service {
 // 5) Reserve item
 // 6) Insert rental
 func (s *service) BookWithDeposit(ctx context.Context, userID, bookID int64, holdMinutes int) (err error) {
-	var dbgCount int64
-	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM books`).Scan(&dbgCount)
-	slog.Info("dbg books count", "count", dbgCount)
-	//debugging
+	// var dbgCount int64
+	// _ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM books`).Scan(&dbgCount)
+	// slog.Info("dbg books count", "count", dbgCount)
+	// //debugging
 
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
@@ -69,7 +68,7 @@ func (s *service) BookWithDeposit(ctx context.Context, userID, bookID int64, hol
 	var price float64
 	var stock int64
 	err = tx.QueryRowContext(ctx,
-		`SELECT rental_cost, stock_availability
+		`SELECT price, stock_availability
 		 FROM books
 		 WHERE id=$1
 		 FOR UPDATE`, bookID).
