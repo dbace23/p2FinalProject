@@ -7,13 +7,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
 type LedgerRow = wrepo.LedgerRow
 
 type Service interface {
-	CreateTopup(ctx context.Context, userID int64, amount float64) (*TopupCreated, error)
+	CreateTopup(ctx context.Context, userID int64, amount float64, payerEmail string) (*TopupCreated, error)
 	Ledger(ctx context.Context, userID int64) ([]LedgerRow, error)
 }
 
@@ -34,7 +35,10 @@ type service struct {
 
 func New(db *sql.DB, r Repo, x xenditrepo.Repo) Service { return &service{db: db, r: r, x: x} }
 
-func (s *service) CreateTopup(ctx context.Context, userID int64, amount float64) (*TopupCreated, error) {
+func (s *service) CreateTopup(ctx context.Context, userID int64, amount float64, payerEmail string) (*TopupCreated, error) {
+	if strings.TrimSpace(payerEmail) == "" {
+		return nil, fmt.Errorf("validation: payer_email required")
+	}
 	if amount <= 0 {
 		return nil, errors.New("invalid amount")
 	}
@@ -42,6 +46,7 @@ func (s *service) CreateTopup(ctx context.Context, userID int64, amount float64)
 		ExternalID:  fmt.Sprintf("topup:%d:%d", userID, time.Now().UnixNano()),
 		Amount:      amount,
 		Description: "Wallet top-up",
+		PayerEmail:  payerEmail,
 		ExpirySec:   3600,
 	})
 	if err != nil {

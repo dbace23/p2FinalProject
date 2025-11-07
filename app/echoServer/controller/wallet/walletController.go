@@ -4,10 +4,12 @@ import (
 	"bookrental/service/wallet"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"bookrental/app/echoServer/jwtx"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 )
 
@@ -26,6 +28,16 @@ func (ct *Controller) CreateTopup(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "invalid or missing token")
 	}
+	tok, _ := c.Get("user").(*jwt.Token)
+	if tok == nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "invalid or missing token")
+	}
+	claims, _ := tok.Claims.(jwt.MapClaims)
+	payerEmail, _ := claims["email"].(string)
+	if strings.TrimSpace(payerEmail) == "" {
+
+		return echo.NewHTTPError(http.StatusBadRequest, "email missing in token")
+	}
 
 	var req CreateTopupReq
 	if err := c.Bind(&req); err != nil {
@@ -37,7 +49,7 @@ func (ct *Controller) CreateTopup(c echo.Context) error {
 		}
 	}
 
-	res, svcErr := ct.Svc.CreateTopup(c.Request().Context(), uid, req.Amount)
+	res, svcErr := ct.Svc.CreateTopup(c.Request().Context(), uid, req.Amount, payerEmail)
 	if svcErr != nil {
 		ct.Log.Error("CreateTopup failed", "err", svcErr)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create topup")

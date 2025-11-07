@@ -86,7 +86,7 @@ func (s *service) Register(ctx context.Context, req model.RegisterReq) (*model.U
 		return nil, "", err
 	}
 
-	tok, err := jwt.Issue(s.jwtSecret, int64(u.ID), u.Role, s.ttlHours)
+	tok, err := jwt.Issue(s.jwtSecret, uint(u.ID), u.Role, u.Email, s.ttlHours)
 	if err != nil {
 		return nil, "", err
 	}
@@ -107,7 +107,7 @@ func (s *service) Login(ctx context.Context, req model.LoginReq) (*model.User, s
 		return nil, "", wrap(ErrInvalidCreds, "invalid email or password")
 	}
 
-	tok, err := jwt.Issue(s.jwtSecret, int64(u.ID), u.Role, s.ttlHours)
+	tok, err := jwt.Issue(s.jwtSecret, uint(u.ID), u.Role, u.Email, s.ttlHours)
 	if err != nil {
 		return nil, "", err
 	}

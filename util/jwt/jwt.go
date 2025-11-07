@@ -10,11 +10,12 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func Issue(secret string, userID int64, role string, ttlHours int) (string, error) {
+func Issue(secret string, userID uint, role, email string, ttlHours int) (string, error) {
 	claims := jwt.MapClaims{
-		"sub":  userID,
-		"role": role,
-		"exp":  time.Now().Add(time.Duration(ttlHours) * time.Hour).Unix(),
+		"sub":   userID,
+		"role":  role,
+		"email": email,
+		"exp":   time.Now().Add(time.Duration(ttlHours) * time.Hour).Unix(),
 	}
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return t.SignedString([]byte(secret))
