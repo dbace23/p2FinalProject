@@ -16,6 +16,10 @@ type Controller struct {
 
 func (h *Controller) HandleXendit(c echo.Context) error {
 	sig := c.Request().Header.Get("X-Callback-Token")
+	h.Log.Info("xendit webhook",
+		"ip", c.RealIP(),
+		"token_present", sig != "",
+	)
 	raw, _ := io.ReadAll(c.Request().Body)
 
 	if err := h.Svc.HandleXendit(c.Request().Context(), sig, raw); err != nil {

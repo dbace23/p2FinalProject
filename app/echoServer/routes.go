@@ -27,8 +27,8 @@ func Register(e *echo.Echo, c C) {
 	pub.POST("/users/register", c.Auth.Register)
 	pub.POST("/users/login", c.Auth.Login)
 
-	// Webhook
-	pub.POST("/webhooks/xendit", c.Payment.HandleXendit)
+	// payment
+	pub.POST("/payment/xendit", c.Payment.HandleXendit)
 
 	// Auth
 	auth := e.Group("/v1")
