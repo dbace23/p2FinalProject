@@ -80,9 +80,9 @@ func (r *repo) DeductDeposit(ctx context.Context, tx *sql.Tx, userID int64, amou
 
 func (r *repo) GetBookPrice(ctx context.Context, tx *sql.Tx, bookID int64) (float64, error) {
 	const q = `
-SELECT rental_cost
-FROM books
-WHERE id = $1`
+			SELECT price
+			FROM books
+			WHERE id = $1`
 	var price float64
 	err := tx.QueryRowContext(ctx, q, bookID).Scan(&price)
 	return price, err
