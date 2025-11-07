@@ -64,7 +64,7 @@ func (r *repo) DeductDeposit(ctx context.Context, tx *sql.Tx, userID int64, amou
 			UPDATE users
 			SET deposit_balance = deposit_balance - $2
 			WHERE id = $1
-			AND deposit >= $2`
+			AND deposit_balance >= $2`
 	res, err := tx.ExecContext(ctx, q, userID, amount)
 	if err != nil {
 		return err
@@ -92,7 +92,7 @@ func (r *repo) LockOneAvailableItem(ctx context.Context, tx *sql.Tx, bookID int6
 	// Prevent double booking with SKIP LOCKED
 	const q = `
 				SELECT id
-				FROM book_items
+				FROM books
 				WHERE book_id = $1
 				AND status = 'AVAILABLE'
 				ORDER BY id

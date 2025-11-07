@@ -51,7 +51,7 @@ func (s *service) BookWithDeposit(ctx context.Context, userID, bookID int64, hol
 	}()
 
 	// Lock user for deposit check
-	var deposit int64
+	var deposit float64
 	err = tx.QueryRowContext(ctx,
 		`SELECT deposit_balance FROM users WHERE id=$1 FOR UPDATE`, userID).
 		Scan(&deposit)
@@ -60,7 +60,8 @@ func (s *service) BookWithDeposit(ctx context.Context, userID, bookID int64, hol
 	}
 
 	// Lock book for availability check
-	var price, stock int64
+	var price float64
+	var stock int64
 	err = tx.QueryRowContext(ctx,
 		`SELECT rental_cost, stock_availability
 		 FROM books
