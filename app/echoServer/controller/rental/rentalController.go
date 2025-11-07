@@ -20,18 +20,17 @@ type Controller struct {
 func (h *Controller) Create(c echo.Context) error {
 	var req CreateRentalReq
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, echo.Map{"message": "invalid json"})
+		return c.JSON(http.StatusBadRequest, echo.Map{"message": "invalid JSON"})
 	}
 	if err := h.V.Struct(req); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{
 			"message": "validation error",
-			"errors":  echo.Map{"book_id": "required, gt 0"},
+			"errors":  err.Error(),
 		})
 	}
-
 	uid, _ := c.Get("user_id").(int64)
 
-	out, err := h.Svc.Create(c.Request().Context(), uid, req.BookID)
+	out, err := h.Svc.Create(c.Request().Context(), uid, req.BookID, req.PayerEmail)
 	if err != nil {
 		h.Log.Error("rental create", "err", err)
 		switch rs.Code(err) {

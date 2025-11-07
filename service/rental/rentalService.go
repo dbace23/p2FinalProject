@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -69,7 +70,7 @@ type Repo interface {
 
 type Service interface {
 	// Create: book a copy and generate an invoice (status BOOKED).
-	Create(ctx context.Context, userID, bookID int64) (*Created, error)
+	Create(ctx context.Context, userID, bookID int64, payerEmail string) (*Created, error)
 
 	// Return: mark ACTIVE rental returned and freeing the book
 	Return(ctx context.Context, userID, rentalID int64) error
@@ -91,7 +92,7 @@ func New(db *sql.DB, r Repo, x xenditrepo.Repo) Service {
 }
 
 // Create books a copy (24h hold) and creates a Xendit invoice. when xendit give post
-func (s *service) Create(ctx context.Context, userID, bookID int64) (*Created, error) {
+func (s *service) Create(ctx context.Context, userID, bookID int64, payerEmail string) (*Created, error) {
 	// check book exist
 	exists, err := s.r.CheckBookExists(ctx, bookID)
 	if err != nil {
@@ -110,12 +111,17 @@ func (s *service) Create(ctx context.Context, userID, bookID int64) (*Created, e
 	// Prepare invoice
 	exp := 24 * time.Hour
 	due := time.Now().UTC().Add(exp)
-	inv, err := s.x.CreateInvoice(xenditrepo.CreateInvoiceReq{
+
+	xreq := xenditrepo.CreateInvoiceReq{
 		ExternalID:  fmt.Sprintf("rental:%d:%d", userID, time.Now().UnixNano()),
 		Amount:      cost,
 		Description: "Book rental",
 		ExpirySec:   int(exp.Seconds()),
-	})
+	}
+	if e := strings.TrimSpace(payerEmail); e != "" {
+		xreq.PayerEmail = e
+	}
+	inv, err := s.x.CreateInvoice(xreq)
 	if err != nil {
 		return nil, err
 	}
