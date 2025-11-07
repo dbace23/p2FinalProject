@@ -50,7 +50,7 @@ func Register(e *echo.Echo, c C) {
 	auth.POST("/wallet/topups", c.Wallet.CreateTopup) // returns payment link
 	auth.GET("/wallet/ledger", c.Wallet.Ledger)       // list ledger
 
-	auth.POST("/rentals/book", c.Rental.Book)         // book + invoice
-	auth.POST("/rentals/:id/return", c.Rental.Return) // return flow
-	auth.GET("/users/me/rentals", c.Rental.MyHistory)
+	auth.POST("/rentals/book", c.Rental.BookWithDeposit)
+	auth.POST("/rentals/:id/return", c.Rental.Return)
+	auth.GET("/rentals/my", c.Rental.MyHistory)
 }

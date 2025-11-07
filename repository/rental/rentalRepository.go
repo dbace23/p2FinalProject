@@ -1,62 +1,204 @@
 // repository/rental/repo.go
-package rentalrepo
+package rental
 
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 )
 
+type HistoryRow struct {
+	RentalID   int64      `json:"rental_id"`
+	BookID     int64      `json:"book_id"`
+	BookName   string     `json:"book_name"`
+	ItemID     int64      `json:"item_id"`
+	Price      float64    `json:"price"`
+	Status     string     `json:"status"` // ACTIVE | RETURNED
+	CreatedAt  time.Time  `json:"created_at"`
+	ReturnedAt *time.Time `json:"returned_at,omitempty"`
+}
+
 type Repo interface {
-	LockUserForUpdate(ctx context.Context, tx *sql.Tx, userID int64) (deposit int64, err error)
-	GetBookPrice(ctx context.Context, tx *sql.Tx, bookID int64) (price int64, err error)
+	// User & money
+	LockUserForUpdate(ctx context.Context, tx *sql.Tx, userID int64) (deposit float64, err error)
+	DeductDeposit(ctx context.Context, tx *sql.Tx, userID int64, amount float64) error
+
+	// Books & items
+	GetBookPrice(ctx context.Context, tx *sql.Tx, bookID int64) (price float64, err error)
 	LockOneAvailableItem(ctx context.Context, tx *sql.Tx, bookID int64) (itemID int64, err error)
-	DeductDeposit(ctx context.Context, tx *sql.Tx, userID int64, amount int64) error
 	ReserveItem(ctx context.Context, tx *sql.Tx, itemID int64, holdUntil *time.Time) error
-	InsertRental(ctx context.Context, tx *sql.Tx, userID, bookID, itemID, price int64, holdUntil *time.Time) error
+
+	// Rentals
+	InsertRental(ctx context.Context, tx *sql.Tx, userID, bookID, itemID int64, price float64, holdUntil *time.Time) error
+	GetRentalOwnerAndStatus(ctx context.Context, tx *sql.Tx, rentalID int64) (ownerID int64, status string, itemID int64, err error)
+	MarkReturned(ctx context.Context, tx *sql.Tx, rentalID int64) error
+	FreeCopy(ctx context.Context, tx *sql.Tx, itemID int64) error
+
+	// History
+	ListMyRentals(ctx context.Context, userID int64) ([]HistoryRow, error)
 }
 
-type repo struct{ db *sql.DB }
-
-func New(db *sql.DB) Repo { return &repo{db} }
-
-func (r *repo) LockUserForUpdate(ctx context.Context, tx *sql.Tx, userID int64) (int64, error) {
-	var deposit int64
-	err := tx.QueryRowContext(ctx, `SELECT deposit_balance FROM users WHERE id=$1 FOR UPDATE`, userID).Scan(&deposit)
-	return deposit, err
+type repo struct {
+	db *sql.DB
 }
 
-func (r *repo) GetBookPrice(ctx context.Context, tx *sql.Tx, bookID int64) (int64, error) {
-	var price int64
-	err := tx.QueryRowContext(ctx, `SELECT rental_cost FROM books WHERE id=$1`, bookID).Scan(&price)
+func New(db *sql.DB) Repo { return &repo{db: db} }
+
+// User & money
+
+func (r *repo) LockUserForUpdate(ctx context.Context, tx *sql.Tx, userID int64) (float64, error) {
+	const q = `
+				SELECT deposit
+				FROM users
+				WHERE id = $1
+				FOR UPDATE`
+	var dep float64
+	err := tx.QueryRowContext(ctx, q, userID).Scan(&dep)
+	return dep, err
+}
+
+func (r *repo) DeductDeposit(ctx context.Context, tx *sql.Tx, userID int64, amount float64) error {
+	// Guard: only deduct if sufficient.
+	const q = `
+			UPDATE users
+			SET deposit = deposit - $2
+			WHERE id = $1
+			AND deposit >= $2`
+	res, err := tx.ExecContext(ctx, q, userID, amount)
+	if err != nil {
+		return err
+	}
+	aff, _ := res.RowsAffected()
+	if aff == 0 {
+		return errors.New("insufficient deposit")
+	}
+	return nil
+}
+
+// Books & items
+
+func (r *repo) GetBookPrice(ctx context.Context, tx *sql.Tx, bookID int64) (float64, error) {
+	const q = `
+SELECT rental_cost
+FROM books
+WHERE id = $1`
+	var price float64
+	err := tx.QueryRowContext(ctx, q, bookID).Scan(&price)
 	return price, err
 }
 
 func (r *repo) LockOneAvailableItem(ctx context.Context, tx *sql.Tx, bookID int64) (int64, error) {
-	var id int64
-	err := tx.QueryRowContext(ctx, `
-		SELECT id FROM book_items
-		WHERE book_id=$1 AND status='AVAILABLE'
-		FOR UPDATE SKIP LOCKED
-		LIMIT 1
-	`, bookID).Scan(&id)
-	return id, err
-}
-
-func (r *repo) DeductDeposit(ctx context.Context, tx *sql.Tx, userID int64, amount int64) error {
-	_, err := tx.ExecContext(ctx, `UPDATE users SET deposit_balance=deposit_balance-$1 WHERE id=$2`, amount, userID)
-	return err
+	// Prevent double booking with SKIP LOCKED
+	const q = `
+				SELECT id
+				FROM book_items
+				WHERE book_id = $1
+				AND status = 'AVAILABLE'
+				ORDER BY id
+				FOR UPDATE SKIP LOCKED
+				LIMIT 1`
+	var itemID int64
+	err := tx.QueryRowContext(ctx, q, bookID).Scan(&itemID)
+	return itemID, err
 }
 
 func (r *repo) ReserveItem(ctx context.Context, tx *sql.Tx, itemID int64, holdUntil *time.Time) error {
-	_, err := tx.ExecContext(ctx, `UPDATE book_items SET status='BOOKED', booked_until=$1 WHERE id=$2`, holdUntil, itemID)
+	const q = `
+	UPDATE book_items
+	SET status = 'BOOKED',
+		booked_until = $2
+	WHERE id = $1`
+	_, err := tx.ExecContext(ctx, q, itemID, holdUntil)
 	return err
 }
 
-func (r *repo) InsertRental(ctx context.Context, tx *sql.Tx, userID, bookID, itemID, price int64, holdUntil *time.Time) error {
-	_, err := tx.ExecContext(ctx, `
-		INSERT INTO rentals (user_id, book_id, book_item_id, status, price, booked_until)
-		VALUES ($1,$2,$3,'BOOKED',$4,$5)
-	`, userID, bookID, itemID, price, holdUntil)
+// Rentals
+
+func (r *repo) InsertRental(ctx context.Context, tx *sql.Tx, userID, bookID, itemID int64, price float64, holdUntil *time.Time) error {
+	//deposit deducted , rental =ACTIVE
+	const q = `
+		INSERT INTO rentals (user_id, book_id, item_id, price, status, hold_until)
+		VALUES ($1, $2, $3, $4, 'ACTIVE', $5)`
+	_, err := tx.ExecContext(ctx, q, userID, bookID, itemID, price, holdUntil)
+	if err != nil {
+		return err
+	}
+	// mark item as RENTED
+	const q2 = `
+		UPDATE book_items
+		SET status = 'RENTED'
+		WHERE id = $1`
+	_, err = tx.ExecContext(ctx, q2, itemID)
 	return err
+}
+
+func (r *repo) GetRentalOwnerAndStatus(ctx context.Context, tx *sql.Tx, rentalID int64) (int64, string, int64, error) {
+	const q = `
+		SELECT user_id, status, item_id
+		FROM rentals
+		WHERE id = $1
+		FOR UPDATE`
+	var uid int64
+	var status string
+	var itemID int64
+	err := tx.QueryRowContext(ctx, q, rentalID).Scan(&uid, &status, &itemID)
+	return uid, status, itemID, err
+}
+
+func (r *repo) MarkReturned(ctx context.Context, tx *sql.Tx, rentalID int64) error {
+	const q = `
+		UPDATE rentals
+		SET status = 'RETURNED',
+			returned_at = NOW()
+		WHERE id = $1`
+	_, err := tx.ExecContext(ctx, q, rentalID)
+	return err
+}
+
+func (r *repo) FreeCopy(ctx context.Context, tx *sql.Tx, itemID int64) error {
+	const q = `
+		UPDATE book_items
+		SET status = 'AVAILABLE',
+			booked_until = NULL
+		WHERE id = $1`
+	_, err := tx.ExecContext(ctx, q, itemID)
+	return err
+}
+
+// History
+
+func (r *repo) ListMyRentals(ctx context.Context, userID int64) ([]HistoryRow, error) {
+	const q = `
+			SELECT
+			r.id          AS rental_id,
+			r.book_id     AS book_id,
+			b.name        AS book_name,
+			r.item_id     AS item_id,
+			r.price       AS price,
+			r.status      AS status,
+			r.created_at  AS created_at,
+			r.returned_at AS returned_at
+			FROM rentals r
+			JOIN books b ON b.id = r.book_id
+			WHERE r.user_id = $1
+			ORDER BY r.created_at DESC, r.id DESC`
+	rows, err := r.db.QueryContext(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []HistoryRow
+	for rows.Next() {
+		var h HistoryRow
+		if err := rows.Scan(
+			&h.RentalID, &h.BookID, &h.BookName, &h.ItemID,
+			&h.Price, &h.Status, &h.CreatedAt, &h.ReturnedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
 }

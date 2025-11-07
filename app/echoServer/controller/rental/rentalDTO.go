@@ -1,6 +1,6 @@
 package rental
 
-type CreateRentalReq struct {
-	BookID     int64  `json:"book_id" validate:"required,gt=0"`
-	PayerEmail string `json:"payer_email" validate:"required,email"`
+type BookWithDepositReq struct {
+	BookID      int64 `json:"book_id" validate:"required,gt=0"`
+	HoldMinutes *int  `json:"hold_minutes,omitempty" validate:"omitempty,min=0,max=1440"`
 }
