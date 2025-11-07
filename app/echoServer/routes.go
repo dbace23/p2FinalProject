@@ -72,6 +72,7 @@ func Register(e *echo.Echo, c C) {
 			}
 
 			ctx.Set("user_id", uid)
+			ctx.Logger().Infof("[AUTH] uid=%d claims=%v", uid, claims)
 			ctx.Logger().Infof("[AUTH] verified user_id=%d req_id=%s ip=%s", uid, reqID, ctx.RealIP())
 			return next(ctx)
 		}

@@ -24,6 +24,9 @@ func userIDFrom(c echo.Context) (int64, bool) {
 
 // POST /v1/rentals/book
 func (h *Controller) BookWithDeposit(c echo.Context) error {
+	if h.Log != nil {
+		h.Log.Info("rental.BookWithDeposit", "user_id", c.Get("user_id"))
+	}
 	var req BookWithDepositReq
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"message": "invalid JSON"})
