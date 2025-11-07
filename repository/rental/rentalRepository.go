@@ -114,7 +114,6 @@ func (r *repo) ReserveItem(ctx context.Context, tx *sql.Tx, itemID int64, holdUn
 }
 
 // Rentals
-
 func (r *repo) InsertRental(ctx context.Context, tx *sql.Tx, userID, bookID, itemID int64, price float64, holdUntil *time.Time) error {
 	//deposit deducted , rental =ACTIVE
 	const q = `
@@ -201,4 +200,15 @@ func (r *repo) ListMyRentals(ctx context.Context, userID int64) ([]HistoryRow, e
 		out = append(out, h)
 	}
 	return out, rows.Err()
+}
+func (r *repo) InsertRentalReturningID(ctx context.Context, tx *sql.Tx, userID, bookID int64, price float64) (int64, error) {
+	const q = `
+		INSERT INTO public.rentals (user_id, book_id, status, price)
+		VALUES ($1, $2, 'ACTIVE', $3)
+		RETURNING id`
+	var id int64
+	if err := tx.QueryRowContext(ctx, q, userID, bookID, price).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }

@@ -68,7 +68,7 @@ func main() {
 	// services
 	as := authsvc.New(ar, cfg.JWTSecret)
 	bs := booksvc.New(br)
-	rs := rentalsvc.New(db, rr)
+	rs := rentalsvc.New(db, rr, wr)
 	ws := walletsvc.New(db, wr, xr)
 	whs := paymentsvc.New(db, xr, wr)
 

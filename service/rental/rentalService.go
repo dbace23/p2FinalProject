@@ -2,6 +2,7 @@ package rental
 
 import (
 	rentalrepo "bookrental/repository/rental"
+	walletrepo "bookrental/repository/wallet"
 	"context"
 	"database/sql"
 	"errors"
@@ -24,10 +25,11 @@ type HistoryRow = rentalrepo.HistoryRow
 type service struct {
 	db *sql.DB
 	rr rentalrepo.Repo
+	wr walletrepo.Repo
 }
 
-func New(db *sql.DB, rr rentalrepo.Repo) Service {
-	return &service{db: db, rr: rr}
+func New(db *sql.DB, rr rentalrepo.Repo, wr walletrepo.Repo) Service {
+	return &service{db: db, rr: rr, wr: wr}
 }
 
 // BookWithDeposit:
@@ -104,11 +106,17 @@ func (s *service) BookWithDeposit(ctx context.Context, userID, bookID int64, hol
 	}
 
 	// Insert rental record
-	if _, err = tx.ExecContext(ctx,
+	var rentalID int64
+	if err = tx.QueryRowContext(ctx,
 		`INSERT INTO rentals (user_id, book_id, status, price)
-		 VALUES ($1, $2, 'BOOKED', $3)`,
-		userID, bookID, price); err != nil {
+     VALUES ($1, $2, 'ACTIVE', $3)
+     RETURNING id`,
+		userID, bookID, price).Scan(&rentalID); err != nil {
 		return fmt.Errorf("insert rental: %w", err)
+	}
+	//ledger credit
+	if err := s.wr.InsertLedger(ctx, tx, userID, "rentals", &rentalID, "RENTAL_REFUND", price /* newBal? recompute */, 0); err != nil {
+		return fmt.Errorf("insert ledger refund: %w", err)
 	}
 
 	return nil
