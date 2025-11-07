@@ -49,7 +49,7 @@ func New(db *sql.DB) Repo { return &repo{db: db} }
 
 func (r *repo) LockUserForUpdate(ctx context.Context, tx *sql.Tx, userID int64) (float64, error) {
 	const q = `
-				SELECT deposit
+				SELECT deposit_balance
 				FROM users
 				WHERE id = $1
 				FOR UPDATE`
@@ -62,7 +62,7 @@ func (r *repo) DeductDeposit(ctx context.Context, tx *sql.Tx, userID int64, amou
 	// Guard: only deduct if sufficient.
 	const q = `
 			UPDATE users
-			SET deposit = deposit - $2
+			SET deposit_balance = deposit_balance - $2
 			WHERE id = $1
 			AND deposit >= $2`
 	res, err := tx.ExecContext(ctx, q, userID, amount)
