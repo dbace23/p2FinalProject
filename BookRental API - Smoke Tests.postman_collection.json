@@ -239,69 +239,17 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"book_id\": {{book_id}},\n  \"payer_email\":\"test@gmail.com\"\n}"
+					"raw": "{\n  \"book_id\": 3,\n  \"hold_minutes\": 60\n}"
 				},
 				"url": {
-					"raw": "{{base_url}}/v1/rentals",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"v1",
-						"rentals"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Payment - Simulate Xendit Callback for Rental (PAID)",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "Content-Type",
-						"value": "application/json"
-					}
-				],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n  \"id\": \"{{invoice_id}}\",\n  \"status\": \"PAID\"\n}"
-				},
-				"url": {
-					"raw": "{{base_url}}/v1/payment/xendit",
-					"host": [
-						"{{base_url}}"
-					],
-					"path": [
-						"v1",
-						"payment",
-						"xendit"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Rentals - Return",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "Authorization",
-						"value": "Bearer {{token}}"
-					}
-				],
-				"url": {
-					"raw": "{{base_url}}/v1/rentals/{{rental_id}}/return",
+					"raw": "{{base_url}}/v1/rentals/book",
 					"host": [
 						"{{base_url}}"
 					],
 					"path": [
 						"v1",
 						"rentals",
-						"{{rental_id}}",
-						"return"
+						"book"
 					]
 				}
 			},
@@ -327,6 +275,31 @@
 						"users",
 						"me",
 						"rentals"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Rentals - Return",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "{{token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/v1/rentals/{{rental_id}}/return",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"rentals",
+						"{{rental_id}}",
+						"return"
 					]
 				}
 			},
