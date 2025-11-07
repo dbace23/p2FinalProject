@@ -135,7 +135,7 @@ func (r *repo) InsertRental(ctx context.Context, tx *sql.Tx, userID, bookID, ite
 
 func (r *repo) GetRentalOwnerAndStatus(ctx context.Context, tx *sql.Tx, rentalID int64) (int64, string, int64, error) {
 	const q = `
-		SELECT user_id, status, item_id
+		SELECT user_id, status, book_id
 		FROM rentals
 		WHERE id = $1
 		FOR UPDATE`
