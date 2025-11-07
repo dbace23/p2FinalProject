@@ -11,6 +11,12 @@ import (
 	"bookrental/util/jwt"
 )
 
+var (
+	hashPassword  = hash.HashPassword
+	checkPassword = hash.Check
+	issueJWT      = jwt.Issue
+)
+
 type ErrCode string
 
 const (
@@ -69,7 +75,7 @@ func (s *service) Register(ctx context.Context, req model.RegisterReq) (*model.U
 		return nil, "", wrap(ErrEmailTaken, "email already registered")
 	}
 
-	hashed, err := hash.HashPassword(req.Password)
+	hashed, err := hashPassword(req.Password)
 	if err != nil {
 		return nil, "", err
 	}
@@ -86,7 +92,7 @@ func (s *service) Register(ctx context.Context, req model.RegisterReq) (*model.U
 		return nil, "", err
 	}
 
-	tok, err := jwt.Issue(s.jwtSecret, uint(u.ID), u.Role, u.Email, s.ttlHours)
+	tok, err := issueJWT(s.jwtSecret, uint(u.ID), u.Role, u.Email, s.ttlHours)
 	if err != nil {
 		return nil, "", err
 	}
@@ -103,11 +109,11 @@ func (s *service) Login(ctx context.Context, req model.LoginReq) (*model.User, s
 	if err != nil || u == nil || u.ID == 0 {
 		return nil, "", wrap(ErrInvalidCreds, "invalid email or password")
 	}
-	if !hash.Check(u.PasswordHash, req.Password) {
+	if !checkPassword(u.PasswordHash, req.Password) {
 		return nil, "", wrap(ErrInvalidCreds, "invalid email or password")
 	}
 
-	tok, err := jwt.Issue(s.jwtSecret, uint(u.ID), u.Role, u.Email, s.ttlHours)
+	tok, err := issueJWT(s.jwtSecret, uint(u.ID), u.Role, u.Email, s.ttlHours)
 	if err != nil {
 		return nil, "", err
 	}

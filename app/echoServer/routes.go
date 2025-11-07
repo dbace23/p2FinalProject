@@ -7,6 +7,7 @@ import (
 	"bookrental/app/echoServer/controller/rental"
 	"bookrental/app/echoServer/controller/wallet"
 	"net/http"
+	"strconv"
 
 	"github.com/golang-jwt/jwt/v5"
 	echojwt "github.com/labstack/echo-jwt/v4"
@@ -39,37 +40,39 @@ func Register(e *echo.Echo, c C) {
 		NewClaimsFunc: func(c echo.Context) jwt.Claims { return jwt.MapClaims{} },
 		TokenLookup:   "header:Authorization",
 	}))
-	// 🔍 JWT debug + user_id extraction
 	auth.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(ctx echo.Context) error {
 			reqID := ctx.Response().Header().Get(echo.HeaderXRequestID)
-			authHeader := ctx.Request().Header.Get("Authorization")
 
-			if authHeader == "" {
-				ctx.Logger().Warnf("[AUTH] missing Authorization header req_id=%s ip=%s", reqID, ctx.RealIP())
+			tokAny := ctx.Get("user")
+			tok, ok := tokAny.(*jwt.Token)
+			if !ok || tok == nil || !tok.Valid {
+				ctx.Logger().Warnf("[AUTH] invalid jwt token req_id=%s", reqID)
 				return ctx.JSON(http.StatusUnauthorized, echo.Map{"message": "unauthorized"})
 			}
 
-			tokenObj := ctx.Get("user")
-			if tokenObj == nil {
-				ctx.Logger().Warnf("[AUTH] tokenObj nil req_id=%s header=%s", reqID, authHeader)
-				return ctx.JSON(http.StatusUnauthorized, echo.Map{"message": "unauthorized"})
-			}
-
-			claims, ok := tokenObj.(jwt.MapClaims)
+			claims, ok := tok.Claims.(jwt.MapClaims)
 			if !ok {
-				ctx.Logger().Warnf("[AUTH] failed to cast claims req_id=%s", reqID)
+				ctx.Logger().Warnf("[AUTH] bad claims type req_id=%s", reqID)
 				return ctx.JSON(http.StatusUnauthorized, echo.Map{"message": "unauthorized"})
 			}
 
-			sub, ok := claims["sub"].(float64)
-			if !ok {
-				ctx.Logger().Warnf("[AUTH] missing sub claim req_id=%s claims=%v", reqID, claims)
+			var uid int64
+			switch v := claims["sub"].(type) {
+			case float64:
+				uid = int64(v)
+			case string:
+				if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+					uid = n
+				}
+			}
+			if uid <= 0 {
+				ctx.Logger().Warnf("[AUTH] missing/invalid sub claim req_id=%s claims=%v", reqID, claims)
 				return ctx.JSON(http.StatusUnauthorized, echo.Map{"message": "unauthorized"})
 			}
 
-			ctx.Set("user_id", int64(sub))
-			ctx.Logger().Infof("[AUTH] verified user_id=%d req_id=%s ip=%s", int64(sub), reqID, ctx.RealIP())
+			ctx.Set("user_id", uid)
+			ctx.Logger().Infof("[AUTH] verified user_id=%d req_id=%s ip=%s", uid, reqID, ctx.RealIP())
 			return next(ctx)
 		}
 	})

@@ -221,3 +221,70 @@ func TestCodeExtractor(t *testing.T) {
 	require.Equal(t, ErrEmailTaken, Code(wrap(ErrEmailTaken, "x")))
 	require.Equal(t, ErrCode(""), Code(errors.New("plain")))
 }
+
+func TestRegister_JWTIssueError(t *testing.T) {
+	ctx := context.Background()
+	m := &mockRepo{
+		byEmailFn: func(ctx context.Context, email string) (*model.User, error) { return nil, nil },
+		createFn:  func(ctx context.Context, u *model.User) error { u.ID = 1; return nil },
+	}
+
+	old := issueJWT
+	issueJWT = func(secret string, id uint, role, email string, ttl int) (string, error) {
+		return "", errors.New("signing failed")
+	}
+	defer func() { issueJWT = old }()
+
+	svc := New(m, "secret")
+	_, _, err := svc.Register(ctx, model.RegisterReq{
+		Email: "ok@example.com", Username: "ok", Password: "123456",
+	})
+	require.Error(t, err)
+}
+func TestLogin_JWTIssueError(t *testing.T) {
+	ctx := context.Background()
+	hashed := mustHash(t, "pw")
+	m := &mockRepo{
+		byEmailFn: func(ctx context.Context, email string) (*model.User, error) {
+			return &model.User{ID: 2, Email: email, PasswordHash: hashed, Role: "user"}, nil
+		},
+	}
+
+	old := issueJWT
+	issueJWT = func(secret string, id uint, role, email string, ttl int) (string, error) {
+		return "", errors.New("signing failed")
+	}
+	defer func() { issueJWT = old }()
+
+	svc := New(m, "secret")
+	_, _, err := svc.Login(ctx, model.LoginReq{Email: "a@b.c", Password: "pw"})
+	require.Error(t, err)
+}
+func TestRegister_HashError(t *testing.T) {
+	ctx := context.Background()
+	m := &mockRepo{
+		byEmailFn: func(ctx context.Context, email string) (*model.User, error) { return nil, nil },
+	}
+
+	old := hashPassword
+	hashPassword = func(pw string) (string, error) { return "", errors.New("bcrypt fail") }
+	defer func() { hashPassword = old }()
+
+	svc := New(m, "secret")
+	_, _, err := svc.Register(ctx, model.RegisterReq{
+		Email: "ok@example.com", Username: "ok", Password: "123456",
+	})
+	require.Error(t, err)
+}
+func TestLogin_RepoError(t *testing.T) {
+	ctx := context.Background()
+	m := &mockRepo{
+		byEmailFn: func(ctx context.Context, email string) (*model.User, error) {
+			return nil, errors.New("db error")
+		},
+	}
+	svc := New(m, "secret")
+	_, _, err := svc.Login(ctx, model.LoginReq{Email: "x@y.z", Password: "pw"})
+	require.Error(t, err)
+	require.Equal(t, ErrInvalidCreds, Code(err)) // matches your logic
+}
