@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/labstack/echo/v4"
 )
@@ -41,7 +40,7 @@ func New(db *sql.DB, rr rentalrepo.Repo) Service {
 func (s *service) BookWithDeposit(ctx context.Context, userID, bookID int64, holdMinutes int) (err error) {
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
-		return echo.NewHTTPError(500, echo.Map{"message": "begin tx failed"})
+		return err
 	}
 	defer func() {
 		if err != nil {
@@ -51,25 +50,30 @@ func (s *service) BookWithDeposit(ctx context.Context, userID, bookID int64, hol
 		}
 	}()
 
-	// 1) Lock user and read deposit
-	deposit, err := s.rr.LockUserForUpdate(ctx, tx, userID)
+	// Lock user for deposit check
+	var deposit int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT deposit_balance FROM users WHERE id=$1 FOR UPDATE`, userID).
+		Scan(&deposit)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(404, echo.Map{"message": "user not found"})
-		}
-		return echo.NewHTTPError(500, echo.Map{"message": fmt.Sprintf("lock user: %v", err)})
+		return echo.NewHTTPError(404, echo.Map{"message": "user not found"})
 	}
 
-	// 2) Get price
-	price, err := s.rr.GetBookPrice(ctx, tx, bookID)
+	// Lock book for availability check
+	var price, stock int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT rental_cost, stock_availability
+		 FROM books
+		 WHERE id=$1
+		 FOR UPDATE`, bookID).
+		Scan(&price, &stock)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(404, echo.Map{"message": "book not found"})
-		}
-		return echo.NewHTTPError(500, echo.Map{"message": fmt.Sprintf("get price: %v", err)})
+		return echo.NewHTTPError(404, echo.Map{"message": "book not found"})
 	}
 
-	// 3) Check deposit
+	if stock <= 0 {
+		return echo.NewHTTPError(409, echo.Map{"message": "no available copy"})
+	}
 	if deposit < price {
 		return echo.NewHTTPError(402, echo.Map{
 			"message": "insufficient deposit",
@@ -77,32 +81,28 @@ func (s *service) BookWithDeposit(ctx context.Context, userID, bookID int64, hol
 		})
 	}
 
-	// 4) Lock one available item
-	itemID, err := s.rr.LockOneAvailableItem(ctx, tx, bookID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(409, echo.Map{"message": "no available copy"})
-		}
-		return echo.NewHTTPError(500, echo.Map{"message": fmt.Sprintf("select item: %v", err)})
+	// Deduct deposit and decrease stock
+	if _, err = tx.ExecContext(ctx,
+		`UPDATE users
+		 SET deposit_balance = deposit_balance - $1
+		 WHERE id = $2`,
+		price, userID); err != nil {
+		return fmt.Errorf("deduct deposit: %w", err)
 	}
 
-	// 5) Deduct deposit
-	if err = s.rr.DeductDeposit(ctx, tx, userID, price); err != nil {
-		return echo.NewHTTPError(500, echo.Map{"message": fmt.Sprintf("deduct deposit: %v", err)})
+	if _, err = tx.ExecContext(ctx,
+		`UPDATE books
+		 SET stock_availability = stock_availability - 1
+		 WHERE id = $1`, bookID); err != nil {
+		return fmt.Errorf("decrease stock: %w", err)
 	}
 
-	// 6) Reserve item with optional hold
-	var holdUntil *time.Time
-	if holdMinutes > 0 {
-		t := time.Now().Add(time.Duration(holdMinutes) * time.Minute).UTC()
-		holdUntil = &t
-	}
-	if err = s.rr.ReserveItem(ctx, tx, itemID, holdUntil); err != nil {
-		return echo.NewHTTPError(500, echo.Map{"message": fmt.Sprintf("reserve item: %v", err)})
-	}
-
-	if err = s.rr.InsertRental(ctx, tx, userID, bookID, itemID, price, holdUntil); err != nil {
-		return echo.NewHTTPError(500, echo.Map{"message": fmt.Sprintf("insert rental: %v", err)})
+	// Insert rental record
+	if _, err = tx.ExecContext(ctx,
+		`INSERT INTO rentals (user_id, book_id, status, price)
+		 VALUES ($1, $2, 'BOOKED', $3)`,
+		userID, bookID, price); err != nil {
+		return fmt.Errorf("insert rental: %w", err)
 	}
 
 	return nil
