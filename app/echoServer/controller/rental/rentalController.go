@@ -45,6 +45,9 @@ func (h *Controller) BookWithDeposit(c echo.Context) error {
 	}
 	if err := h.Svc.BookWithDeposit(c.Request().Context(), uid, req.BookID, hold); err != nil {
 		if he, ok := err.(*echo.HTTPError); ok {
+			if h.Log != nil {
+				h.Log.Warn("book failed", "err", he, "user_id", uid, "book_id", req.BookID)
+			}
 			return he
 		}
 		return c.JSON(http.StatusInternalServerError, echo.Map{"message": "internal error"})
